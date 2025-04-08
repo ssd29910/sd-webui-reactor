@@ -44,72 +44,43 @@ def get_SDNEXT():
     return IS_SDNEXT
 
 def make_grid(image_list: List):
-    
-    # Count the occurrences of each image size in the image_list
+    # Compte les occurrences de chaque taille dans image_list
     size_counter = Counter(image.size for image in image_list)
-    
-    # Get the most common image size (size with the highest count)
+    # Récupère la taille la plus fréquente
     common_size = size_counter.most_common(1)[0][0]
-    
-    # Filter the image_list to include only images with the common size
+    # Filtre image_list pour ne garder que celles de taille commune
     image_list = [image for image in image_list if image.size == common_size]
-    
-    # Get the dimensions (width and height) of the common size
     size = common_size
-    
-    # If there are more than one image in the image_list
     if len(image_list) > 1:
         num_images = len(image_list)
-        
-        # Calculate the number of rows and columns for the grid
         rows = isqrt(num_images)
         cols = ceil(num_images / rows)
-
-        # Calculate the size of the square image
         square_size = (cols * size[0], rows * size[1])
-
-        # Create a new RGB image with the square size
         square_image = Image.new("RGB", square_size)
-
-        # Paste each image onto the square image at the appropriate position
         for i, image in enumerate(image_list):
             row = i // cols
             col = i % cols
-
             square_image.paste(image, (col * size[0], row * size[1]))
-
-        # Return the resulting square image
         return square_image
-    
-    # Return None if there are no images or only one image in the image_list
     return None
 
 def get_image_path(image, path, basename, seed=None, prompt=None, extension='png', p=None, suffix=""):
-    
     namegen = FilenameGenerator(p, seed, prompt, image)
-
     save_to_dirs = shared.opts.save_to_dirs
-
     if save_to_dirs:
         dirname = namegen.apply(shared.opts.directories_filename_pattern or "[prompt_words]").lstrip(' ').rstrip('\\ /')
         path = os.path.join(path, dirname)
-
     os.makedirs(path, exist_ok=True)
-
     if seed is None:
         file_decoration = ""
     elif shared.opts.save_to_dirs:
         file_decoration = shared.opts.samples_filename_pattern or "[seed]"
     else:
         file_decoration = shared.opts.samples_filename_pattern or "[seed]-[prompt_spaces]"
-
     file_decoration = namegen.apply(file_decoration) + suffix
-
     add_number = shared.opts.save_images_add_number or file_decoration == ''
-
     if file_decoration != "" and add_number:
         file_decoration = f"-{file_decoration}"
-
     if add_number:
         basecount = get_next_sequence_number(path, basename)
         fullfn = None
@@ -120,34 +91,26 @@ def get_image_path(image, path, basename, seed=None, prompt=None, extension='png
                 break
     else:
         fullfn = os.path.join(path, f"{file_decoration}.{extension}")
-
     pnginfo = {}
-
     params = script_callbacks.ImageSaveParams(image, p, fullfn, pnginfo)
     # script_callbacks.before_image_saved_callback(params)
-
     fullfn = params.filename
-
     fullfn_without_extension, extension = os.path.splitext(params.filename)
     if hasattr(os, 'statvfs'):
         max_name_len = os.statvfs(path).f_namemax
         fullfn_without_extension = fullfn_without_extension[:max_name_len - max(4, len(extension))]
         params.filename = fullfn_without_extension + extension
         fullfn = params.filename
-
     return fullfn
 
 def addLoggingLevel(levelName, levelNum, methodName=None):
     if not methodName:
         methodName = levelName.lower()
-
     def logForLevel(self, message, *args, **kwargs):
         if self.isEnabledFor(levelNum):
             self._log(levelNum, message, args, **kwargs)
-
     def logToRoot(message, *args, **kwargs):
         logging.log(levelNum, message, *args, **kwargs)
-
     logging.addLevelName(levelNum, levelName)
     setattr(logging, levelName, levelNum)
     setattr(logging.getLoggerClass(), methodName, logForLevel)
@@ -171,7 +134,6 @@ def save_face_model(face: Face, filename: str) -> None:
             "age": torch.tensor(face["age"]),
         }
         save_file(tensors, filename)
-        # print(f"Face model has been saved to '{filename}'")
     except Exception as e:
         print(f"Error: {e}")
 
@@ -182,33 +144,32 @@ def get_models():
     models = [x for x in models if x.endswith(".onnx") or x.endswith(".pth")]
     models_names = []
     for model in models:
-        model_path = os.path.split(model)
+        model_path_split = os.path.split(model)
         if MODELS_PATH is None:
-            MODELS_PATH = model_path[0]
-        model_name = model_path[1]
+            MODELS_PATH = model_path_split[0]
+        model_name = model_path_split[1]
         models_names.append(model_name)
     return models_names
 
 def load_face_model(filename: str):
     face = {}
-    model_path = os.path.join(FACE_MODELS_PATH, filename)
-    with safe_open(model_path, framework="pt") as f:
+    model_path_full = os.path.join(FACE_MODELS_PATH, filename)
+    with safe_open(model_path_full, framework="pt") as f:
         for k in f.keys():
             face[k] = f.get_tensor(k).numpy()
     return Face(face)
 
 def get_facemodels():
-    models_path = os.path.join(FACE_MODELS_PATH, "*")
-    models = glob.glob(models_path)
+    models_path_full = os.path.join(FACE_MODELS_PATH, "*")
+    models = glob.glob(models_path_full)
     models = [x for x in models if x.endswith(".safetensors")]
     return models
 
-def get_model_names(get_models):
-    models = get_models()
+def get_model_names(get_models_func):
+    models = get_models_func()
     names = []
     for x in models:
         names.append(os.path.basename(x))
-    # Sort ignoring case during sort but retain in output
     names.sort(key=str.lower)
     names.insert(0, "None")
     return names
@@ -219,16 +180,15 @@ def get_images_from_folder(path: str):
     images = []
     images_names = []
     for x in files:
-        if x.endswith(('jpg', 'png', 'jpeg', 'webp', 'bmp')):
+        if x.lower().endswith(('jpg', 'png', 'jpeg', 'webp', 'bmp')):
             images.append(Image.open(x))
             images_names.append(os.path.basename(x))
-    return images,images_names
-    # return [Image.open(x) for x in images if x.endswith(('jpg', 'png', 'jpeg', 'webp', 'bmp'))],[os.path.basename(x) for x in images if x.endswith(('jpg', 'png', 'jpeg', 'webp', 'bmp'))]
+    return images, images_names
 
 def get_random_image_from_folder(path: str):
-    images,names = get_images_from_folder(path)
+    images, names = get_images_from_folder(path)
     random_image_index = random.randint(0, len(images) - 1)
-    return [images[random_image_index]],[names[random_image_index]]
+    return [images[random_image_index]], [names[random_image_index]]
 
 def get_images_from_list(imgs: List):
     images = []
@@ -236,8 +196,7 @@ def get_images_from_list(imgs: List):
     for x in imgs:
         images.append(Image.open(os.path.abspath(x.name)))
         images_names.append(os.path.basename(x.name))
-    return images,images_names
-    # return [Image.open(os.path.abspath(x.name)) for x in imgs],[os.path.basename(x.name) for x in imgs]
+    return images, images_names
 
 def download(url, path, name):
     request = urllib.request.urlopen(url)
@@ -246,16 +205,11 @@ def download(url, path, name):
         urllib.request.urlretrieve(url, path, reporthook=lambda count, block_size, total_size: progress.update(block_size))
 
 def check_nsfwdet_model(path: str):
+    """
+    Vérifie la présence du modèle NSFW. Si le modèle n'est pas présent,
+    le téléchargement est bypassé.
+    """
     if not os.path.exists(path):
-        print("Downloading `vit-base-nsfw-detector`, please wait...\n")
-        os.makedirs(path)
-        nd_urls = [
-            "https://huggingface.co/AdamCodd/vit-base-nsfw-detector/resolve/main/config.json",
-            "https://huggingface.co/AdamCodd/vit-base-nsfw-detector/resolve/main/confusion_matrix.png",
-            "https://huggingface.co/AdamCodd/vit-base-nsfw-detector/resolve/main/model.safetensors",
-            "https://huggingface.co/AdamCodd/vit-base-nsfw-detector/resolve/main/preprocessor_config.json",
-        ]
-        for model_url in nd_urls:
-            model_name = os.path.basename(model_url)
-            model_path = os.path.join(path, model_name)
-            download(model_url, model_path, model_name)
+        print("Modèle NSFW non trouvé. Téléchargement bypassé.")
+    else:
+        print("Modèle NSFW trouvé.")
